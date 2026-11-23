@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Timesheet</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --accent: #38bdf8;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --success: #34d399;
+    --danger: #f87171;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 1rem;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .container { max-width: 700px; margin: 0 auto; }
+  h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
+  .period { color: var(--muted); font-size: 0.9rem; margin-bottom: 1rem; }
+  .card {
+    background: var(--card);
+    border-radius: 12px;
+    padding: 1.1rem;
+    margin-bottom: 1rem;
+  }
+  label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
+  input, select {
+    width: 100%;
+    padding: 0.65rem;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    background: #0f172a;
+    color: var(--text);
+    font-size: 1rem;
+    margin-bottom: 0.6rem;
+  }
+  .row { display: flex; gap: 0.6rem; }
+  .row > * { flex: 1; }
+  button {
+    background: var(--accent);
+    color: #0f172a;
+    border: none;
+    padding: 0.7rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+    width: 100%;
+  }
+  button.secondary { background: #334155; color: var(--text); }
+  button.danger { background: var(--danger); color: white; }
+  button.success { background: var(--success); color: #0f172a; }
+  .actions { display: flex; gap: 0.5rem; margin-top: 0.5rem; }
+  .actions button { width: auto; flex: 1; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.5rem 0.3rem; border-bottom: 1px solid #334155; }
+  th { color: var(--muted); font-weight: 500; }
+  .total { font-weight: 600; color: var(--success); margin-top: 0.5rem; }
+  .setup { text-align: center; padding: 2rem 1rem; }
+  .hidden { display: none; }
+  .entry-type { font-weight: 600; color: var(--accent); }
+  .status { font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="setup" class="card setup">
+    <h1>Timesheet Setup</h1>
+    <p style="color:var(--muted)">Enter your name once. It will be saved on this device.</p>
+    <input type="text" id="setupName" placeholder="Your full name">
+    <button onclick="saveName()">Continue</button>
+  </div>
+
+  <div id="app" class="hidden">
+    <h1 id="greeting">Timesheet</h1>
+    <div class="period" id="periodInfo"></div>
+
+    <div class="card">
+      <h2 style="margin:0 0 0.75rem;font-size:1.05rem">Add Entry</h2>
+      <label>Date</label>
+      <input type="date" id="entryDate">
+
+      <label>Type</label>
+      <select id="entryType" onchange="toggleLunch()">
+        <option value="Customer">Customer / Job</option>
+        <option value="Travel">Travel</option>
+        <option value="Office">Office</option>
+        <option value="Lunch">Lunch</option>
+        <option value="Vacation">Vacation</option>
+        <option value="Sick">Sick Time</option>
+        <option value="Holiday">Holiday Pay</option>
+      </select>
+
+      <div id="timeFields">
+        <div class="row">
+          <div>
+            <label>Start</label>
+            <input type="time" id="startTime">
+          </div>
+          <div>
+            <label>Stop</label>
+            <input type="time" id="stopTime">
+          </div>
+        </div>
+        <div class="actions">
+          <button class="secondary" type="button" onclick="setNow('startTime')">Now (Start)</button>
+          <button class="secondary" type="button" onclick="setNow('stopTime')">Now (Stop)</button>
+        </div>
+      </div>
+
+      <div id="lunchFields" class="hidden">
+        <label>Lunch Duration</label>
+        <select id="lunchDuration">
+          <option value="0.5">30 minutes</option>
+          <option value="1">1 hour</option>
+        </select>
+      </div>
+
+      <div id="hoursFields" class="hidden">
+        <label>Hours</label>
+        <input type="number" id="offHours" step="0.25" min="0" placeholder="e.g. 8">
+      </div>
+
+      <label>Description</label>
+      <input type="text" id="notes" placeholder="Job details, customer, reason, etc.">
+
+      <button onclick="addEntry()">Add Entry</button>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 0.5rem;font-size:1.05rem">Today's Entries</h2>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 0.5rem">Entries for other days appear below under Pay Period Entries.</p>
+      <div id="entriesList"></div>
+      <div class="total" id="dayTotal">Today: 0.00 hrs</div>
+      <div class="total" id="dayOT" style="color:#fbbf24;font-size:0.9rem;margin-top:0.25rem;"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 0.5rem;font-size:1.05rem">Pay Period Entries</h2>
+      <div id="periodEntriesList"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 0.5rem;font-size:1.05rem">This Pay Period</h2>
+      <div id="periodTotal" class="total"></div>
+      <div id="periodOT" class="total" style="color:#fbbf24;font-size:0.95rem;margin-top:0.25rem;"></div>
+      <div class="actions">
+        <button class="success" onclick="exportCSV()">Export CSV</button>
+        <button onclick="submitTimesheet()">Submit Timesheet</button>
+      </div>
+      <div class="status" id="submitStatus"></div>
+      <p style="font-size:0.75rem;color:var(--muted);margin-top:0.75rem">
+        After installing the app, employees open it from their home screen (no browser).
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ⚠️ PASTE YOUR FORMSPREE ENDPOINT HERE
+const FORMSPREE_URL = 'https://formspree.io/f/xyewpvnb';
+
+const STORAGE_KEY = 'employeeTimesheet_v2';
+let data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+let employeeName = data.name || '';
+
+function saveData() {
+  data.name = employeeName;
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+function saveName() {
+  const name = document.getElementById('setupName').value.trim();
+  if (!name) return alert('Please enter your name.');
+  employeeName = name;
+  data.entries = data.entries || [];
+  saveData();
+  showApp();
+}
+
+function showApp() {
+  document.getElementById('setup').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('greeting').textContent = employeeName;
+  // Default date to today
+  document.getElementById('entryDate').valueAsDate = new Date();
+  updatePeriodInfo();
+  render();
+}
+
+function getCurrentPayPeriod() {
+  // Force current period: Nov 19 2026 (Thu) – Dec 3 2026 (Thu)
+  // Adjust this anchor date if your cycle changes
+  const end = new Date(2026, 11, 3, 23, 59, 59, 999); // Dec 3 2026
+  const start = new Date(2026, 10, 19, 0, 0, 0, 0);   // Nov 19 2026
+  return { start, end };
+}
+
+function updatePeriodInfo() {
+  const { start, end } = getCurrentPayPeriod();
+  const fmt = d => d.toLocaleDateString(undefined, { month:'short', day:'numeric' });
+  document.getElementById('periodInfo').textContent =
+    `Pay period: ${fmt(start)} – ${fmt(end)} (ends Wed 11:59 PM)`;
+}
+
+function setNow(fieldId) {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2,'0');
+  const mm = String(now.getMinutes()).padStart(2,'0');
+  document.getElementById(fieldId).value = `${hh}:${mm}`;
+}
+
+function toggleLunch() {
+  const type = document.getElementById('entryType').value;
+  document.getElementById('timeFields').classList.toggle('hidden', type === 'Lunch' || type === 'Vacation' || type === 'Sick' || type === 'Holiday');
+  document.getElementById('lunchFields').classList.toggle('hidden', type !== 'Lunch');
+  document.getElementById('hoursFields').classList.toggle('hidden', type !== 'Vacation' && type !== 'Sick' && type !== 'Holiday');
+}
+
+function addEntry() {
+  try {
+    const type = document.getElementById('entryType').value;
+    const notes = document.getElementById('notes').value.trim();
+    const date = document.getElementById('entryDate').value;
+    if (!date) return alert('Please select a date.');
+    let hours = 0;
+    let start = '', stop = '';
+
+    if (type === 'Lunch') {
+      hours = parseFloat(document.getElementById('lunchDuration').value);
+    } else if (type === 'Vacation' || type === 'Sick' || type === 'Holiday') {
+      hours = parseFloat(document.getElementById('offHours').value) || 0;
+      if (hours <= 0) return alert('Enter hours.');
+    } else {
+      start = document.getElementById('startTime').value;
+      stop = document.getElementById('stopTime').value;
+      if (!start || !stop) return alert('Enter start and stop times (or use Now buttons).');
+      hours = calcHours(start, stop);
+      if (hours <= 0) return alert('Stop must be after start.');
+    }
+
+    data.entries = data.entries || [];
+    data.entries.push({
+      id: Date.now(),
+      date, type, start, stop,
+      hours: +hours.toFixed(2),
+      notes
+    });
+    saveData();
+    render();
+
+    // Clear form fields but keep the selected date
+    document.getElementById('notes').value = '';
+    document.getElementById('startTime').value = '';
+    document.getElementById('stopTime').value = '';
+    document.getElementById('offHours').value = '';
+
+    // Scroll to the period list so the user sees the new entry
+    document.getElementById('periodEntriesList').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (err) {
+    alert('Error adding entry: ' + err.message);
+    console.error(err);
+  }
+}
+
+function calcHours(start, stop) {
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = stop.split(':').map(Number);
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  return mins / 60;
+}
+
+function deleteEntry(id) {
+  if (!confirm('Delete this entry?')) return;
+  data.entries = data.entries.filter(e => e.id !== id);
+  saveData();
+  render();
+}
+
+function render() {
+  const today = new Date().toISOString().slice(0,10);
+  const todayEntries = (data.entries || []).filter(e => e.date === today);
+  const { start, end } = getCurrentPayPeriod();
+  const periodEntries = (data.entries || []).filter(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    return d >= start && d <= end;
+  });
+
+  // Daily totals (exclude Lunch)
+  const workToday = todayEntries.filter(e => e.type !== 'Lunch');
+  const dayTotal = workToday.reduce((s, e) => s + e.hours, 0);
+  const dayOTHours = Math.max(0, dayTotal - 8);
+  document.getElementById('dayTotal').textContent = `Today: ${dayTotal.toFixed(2)} hrs`;
+  document.getElementById('dayOT').textContent = dayOTHours > 0 
+    ? `Over 8 hrs today: ${dayOTHours.toFixed(2)} hrs (listed as OT)` 
+    : '';
+
+  // Period totals and OT logic (exclude Lunch from work hours)
+  const workPeriod = periodEntries.filter(e => e.type !== 'Lunch');
+  const periodTotal = workPeriod.reduce((s, e) => s + e.hours, 0);
+  
+  // Calculate daily OT list for the period (work hours only)
+  const byDate = {};
+  workPeriod.forEach(e => {
+    byDate[e.date] = (byDate[e.date] || 0) + e.hours;
+  });
+  let dailyOTList = [];
+  let totalDailyOT = 0;
+  Object.keys(byDate).forEach(date => {
+    const hrs = byDate[date];
+    if (hrs > 8) {
+      const ot = hrs - 8;
+      dailyOTList.push({ date, ot });
+      totalDailyOT += ot;
+    }
+  });
+
+  // Actual payable OT only after 40 hours
+  const payableOT = periodTotal > 40 ? Math.min(periodTotal - 40, totalDailyOT) : 0;
+  const regularHours = periodTotal - payableOT;
+
+  document.getElementById('periodTotal').textContent = 
+    `Pay period total: ${periodTotal.toFixed(2)} hrs (Regular: ${regularHours.toFixed(2)})`;
+  document.getElementById('periodOT').textContent = 
+    periodTotal > 40 
+      ? `Overtime (after 40 hrs): ${payableOT.toFixed(2)} hrs` 
+      : totalDailyOT > 0 
+        ? `Daily OT listed: ${totalDailyOT.toFixed(2)} hrs (not payable until 40 hrs reached)` 
+        : '';
+
+  // Today's list
+  const list = document.getElementById('entriesList');
+  if (todayEntries.length === 0) {
+    list.innerHTML = '<p style="color:var(--muted);margin:0.5rem 0">No entries today yet.</p>';
+  } else {
+    list.innerHTML = `
+      <table>
+        <tr><th>Type</th><th>Time</th><th>Hrs</th><th>Description</th><th></th></tr>
+        ${todayEntries.map(e => `
+          <tr>
+            <td class="entry-type">${e.type}</td>
+            <td>${e.start && e.stop ? e.start + '–' + e.stop : '—'}</td>
+            <td>${e.hours.toFixed(2)}</td>
+            <td>${e.notes || ''}</td>
+            <td><button class="danger" style="padding:0.25rem 0.5rem;font-size:0.75rem" onclick="deleteEntry(${e.id})">✕</button></td>
+          </tr>
+        `).join('')}
+      </table>
+    `;
+  }
+
+  // Full period list grouped by date
+  const periodList = document.getElementById('periodEntriesList');
+  if (periodEntries.length === 0) {
+    periodList.innerHTML = '<p style="color:var(--muted);margin:0.5rem 0">No entries in this pay period yet.</p>';
+  } else {
+    const grouped = {};
+    periodEntries.forEach(e => {
+      if (!grouped[e.date]) grouped[e.date] = [];
+      grouped[e.date].push(e);
+    });
+    const dates = Object.keys(grouped).sort().reverse();
+    periodList.innerHTML = dates.map(date => {
+      const dayEntries = grouped[date];
+      const dayHrs = dayEntries.filter(e => e.type !== 'Lunch').reduce((s, e) => s + e.hours, 0);
+      const dayOT = Math.max(0, dayHrs - 8);
+      return `
+        <div style="margin-bottom:1rem;border-bottom:1px solid #334155;padding-bottom:0.5rem;">
+          <strong>${date}</strong> — ${dayHrs.toFixed(2)} hrs${dayOT > 0 ? ` <span style="color:#fbbf24">(+${dayOT.toFixed(2)} OT)</span>` : ''}
+          <table style="margin-top:0.3rem;">
+            <tr><th>Type</th><th>Time</th><th>Hrs</th><th>Description</th><th></th></tr>
+            ${dayEntries.map(e => `
+              <tr>
+                <td>${e.type}</td>
+                <td>${e.start && e.stop ? e.start + '–' + e.stop : '—'}</td>
+                <td>${e.hours.toFixed(2)}</td>
+                <td>${e.notes || ''}</td>
+                <td><button class="danger" style="padding:0.2rem 0.4rem;font-size:0.7rem" onclick="deleteEntry(${e.id})">✕</button></td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }).join('');
+  }
+}
+
+function exportCSV() {
+  const { start, end } = getCurrentPayPeriod();
+  const periodEntries = (data.entries || []).filter(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    return d >= start && d <= end;
+  });
+  if (periodEntries.length === 0) return alert('No entries in this pay period.');
+
+  const headers = ['Employee','Date','Type','Start','Stop','Hours','Notes'];
+  const rows = periodEntries.map(e => [
+    employeeName, e.date, e.type, e.start || '', e.stop || '', e.hours.toFixed(2), e.notes || ''
+  ]);
+  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `timesheet-${employeeName.replace(/\s+/g,'_')}-${end.toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+async function submitTimesheet() {
+  if (FORMSPREE_URL.includes('YOUR_FORM_ID')) {
+    alert('Formspree is not configured yet. Edit the HTML and paste your Formspree URL.');
+    return;
+  }
+
+  const { start, end } = getCurrentPayPeriod();
+  const periodEntries = (data.entries || []).filter(e => {
+    const d = new Date(e.date + 'T00:00:00');
+    return d >= start && d <= end;
+  });
+  if (periodEntries.length === 0) return alert('No entries in this pay period to submit.');
+
+  const total = periodEntries.reduce((s, e) => s + e.hours, 0);
+
+  // Split into two weeks
+  const mid = new Date(start);
+  mid.setDate(start.getDate() + 7);
+  const week1 = periodEntries.filter(e => new Date(e.date + 'T00:00:00') < mid);
+  const week2 = periodEntries.filter(e => new Date(e.date + 'T00:00:00') >= mid);
+
+  const formatWeek = (entries, label) => {
+    if (entries.length === 0) return `${label}\n(No entries)\n`;
+    let text = `${label}\n`;
+    text += `Date | Type | Start | Stop | Hours | Description\n`;
+    text += `------------------------------------------------\n`;
+    entries.forEach(e => {
+      text += `${e.date} | ${e.type} | ${e.start || '-'} | ${e.stop || '-'} | ${e.hours.toFixed(2)} | ${e.notes || ''}\n`;
+    });
+    const weekTotal = entries.filter(e => e.type !== 'Lunch').reduce((s, e) => s + e.hours, 0);
+    text += `Week total: ${weekTotal.toFixed(2)} hrs\n\n`;
+    return text;
+  };
+
+  const week1Label = `Week 1: ${start.toLocaleDateString()} – ${new Date(mid.getTime() - 86400000).toLocaleDateString()}`;
+  const week2Label = `Week 2: ${mid.toLocaleDateString()} – ${end.toLocaleDateString()}`;
+
+  let bodyText = `Employee: ${employeeName}\n`;
+  bodyText += `Pay period: ${start.toLocaleDateString()} – ${end.toLocaleDateString()}\n`;
+  bodyText += `Total hours: ${total.toFixed(2)}\n\n`;
+  bodyText += formatWeek(week1, week1Label);
+  bodyText += formatWeek(week2, week2Label);
+
+  // OT summary
+  const byDate = {};
+  periodEntries.forEach(e => { byDate[e.date] = (byDate[e.date] || 0) + e.hours; });
+  let totalDailyOT = 0;
+  Object.values(byDate).forEach(hrs => { if (hrs > 8) totalDailyOT += (hrs - 8); });
+  const payableOT = total > 40 ? Math.min(total - 40, totalDailyOT) : 0;
+  bodyText += `Regular hours: ${(total - payableOT).toFixed(2)}\n`;
+  bodyText += `Overtime (after 40 hrs): ${payableOT.toFixed(2)}\n`;
+
+  const status = document.getElementById('submitStatus');
+  status.textContent = 'Submitting…';
+  status.style.color = 'var(--muted)';
+
+  const payload = {
+    employee: employeeName,
+    period_end: end.toISOString().slice(0,10),
+    total_hours: total.toFixed(2),
+    regular_hours: (total - payableOT).toFixed(2),
+    overtime_hours: payableOT.toFixed(2),
+    week1_summary: formatWeek(week1, week1Label),
+    week2_summary: formatWeek(week2, week2Label),
+    entries: periodEntries.map(e => ({
+      date: e.date,
+      type: e.type,
+      start: e.start || '',
+      stop: e.stop || '',
+      hours: e.hours,
+      description: e.notes || ''
+    })),
+    _subject: `Timesheet – ${employeeName} – Period ending ${end.toISOString().slice(0,10)}`,
+    message: bodyText
+  };
+
+  try {
+    const res = await fetch(FORMSPREE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    if (res.ok) {
+      status.textContent = 'Timesheet submitted successfully!';
+      status.style.color = 'var(--success)';
+    } else {
+      throw new Error('Submit failed');
+    }
+  } catch (err) {
+    status.textContent = 'Submit failed. Check connection or Formspree setup.';
+    status.style.color = 'var(--danger)';
+  }
+}
+
+// PWA install prompt
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+// Init
+if (employeeName) showApp();
+else document.getElementById('setup').classList.remove('hidden');
+toggleLunch();
+</script>
+</body>
+</html>
